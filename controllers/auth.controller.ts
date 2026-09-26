@@ -1,7 +1,10 @@
 import { Request, Response } from "express";
 import User from "../models/user.model";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import { AuthRequest } from "../middlewares/auth.middleware";
 
+// Sinup COntroller
 export const signup = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, email, password } = req.body;
@@ -31,12 +34,122 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
     // 4. Create User
     const user = await User.create({ name, email, password: hashedPassword });
 
+    // JWT
+    const token = jwt.sign(
+      { userId: user._id.toString(), role: user.role },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "7d" },
+    );
+
     res.status(201).json({
       success: true,
       message: "User registered successfully",
+      token,
+      user: {
+        id: user?._id,
+        name: user?.name,
+        email: user?.email,
+        role: user?.role,
+      },
     });
   } catch (error) {
     console.error("Register error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+// Login Controller
+export const login = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, password } = req.body;
+
+    // Checked require fields
+    if (!email || !password) {
+      res.status(400).json({
+        success: false,
+        message: "Email and password are required",
+      });
+      return;
+    }
+
+    //Find User
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        message: "User not found!",
+      });
+      return;
+    }
+
+    // Compare password
+    const isPasswordMatch = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordMatch) {
+      res.status(400).json({
+        success: false,
+        message: "Password is incorrect!",
+      });
+      return;
+    }
+
+    // JWT
+    const token = jwt.sign(
+      { userId: user._id.toString(), role: user.role },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "7d" },
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Login Successfully",
+      token,
+      user: {
+        id: user?._id,
+        name: user?.name,
+        email: user?.email,
+        role: user?.role,
+      },
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Login failed",
+    });
+  }
+};
+
+// GetME controller
+export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const user = await User.findById(req.user?.userId);
+
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.error("Get me error:", error);
 
     res.status(500).json({
       success: false,
