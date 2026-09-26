@@ -3,6 +3,7 @@ import User from "../models/user.model";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { AuthRequest } from "../middlewares/auth.middleware";
+import validator from "validator";
 
 // Sinup COntroller
 export const signup = async (req: Request, res: Response): Promise<void> => {
@@ -18,6 +19,22 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // Validator
+    if (!validator.isEmail(email)) {
+      res.status(400).json({
+        success: false,
+        message: "Email is not valid!",
+      });
+      return;
+    }
+    if (!validator.isStrongPassword(password)) {
+      res.status(400).json({
+        success: false,
+        message:
+          "A strong password must be at least 8 characters long and combine random uppercase and lowercase letters, numbers, and symbols!",
+      });
+      return;
+    }
     // 2. Check existing user
     const exisitngUser = await User.findOne({ email });
 
@@ -41,10 +58,16 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
       { expiresIn: "7d" },
     );
 
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
     res.status(201).json({
       success: true,
       message: "User registered successfully",
-      token,
       user: {
         id: user?._id,
         name: user?.name,
@@ -105,10 +128,16 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       { expiresIn: "7d" },
     );
 
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
     res.status(200).json({
       success: true,
       message: "Login Successfully",
-      token,
       user: {
         id: user?._id,
         name: user?.name,
@@ -154,6 +183,29 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
     res.status(500).json({
       success: false,
       message: "Internal server error",
+    });
+  }
+};
+
+// LogOut
+export const logout = async (req: Request, res: Response): Promise<void> => {
+  try {
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Logged out successfully",
+    });
+  } catch (error) {
+    console.error("Logout error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Logout failed",
     });
   }
 };
